@@ -46,6 +46,8 @@ async def step(request: Request):
         "info": info
     }
 
+import uvicorn
+
 @app.get("/")
 async def root():
     return {
@@ -53,3 +55,9 @@ async def root():
         "message": "Email RL Environment Server is running.",
         "endpoints": ["POST /reset", "POST /step"]
     }
+
+def run_server():
+    uvicorn.run("server:app", host="0.0.0.0", port=7860)
+
+if __name__ == "__main__":
+    run_server()

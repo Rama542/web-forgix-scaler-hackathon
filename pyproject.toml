@@ -1,14 +1,11 @@
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "email-rl-env"
 version = "1.0.0"
 description = "An OpenEnv-compatible reinforcement learning environment for email management"
-authors = [
-    {name = "Sriram Thiruveedhula"},
-]
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -17,5 +14,9 @@ dependencies = [
     "pyyaml>=6.0",
     "gradio>=4.0.0",
     "fastapi>=0.100.0",
-    "uvicorn[standard]>=0.20.0"
+    "uvicorn[standard]>=0.20.0",
+    "openenv>=0.2.0"
 ]
+
+[project.scripts]
+server = "server:run_server"
