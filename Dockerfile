@@ -35,8 +35,6 @@ EXPOSE 7860
 # Runtime environment variable defaults (override with -e at docker run)
 ENV API_BASE_URL="https://api.openai.com/v1"
 ENV MODEL_NAME="gpt-3.5-turbo"
-ENV HF_TOKEN=""
-ENV RUN_MODE="inference"
-
-# Entrypoint selects script based on RUN_MODE
-CMD ["sh", "-c", "if [ \"$RUN_MODE\" = 'app' ]; then python app.py; else python inference.py; fi"]
+# OpenEnv API Server requires FastAPI & Uvicorn (see requirements.txt)
+# The entrypoint launches the Environment Server which listens for /reset and /step
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "7860"]
