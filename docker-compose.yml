@@ -1,0 +1,36 @@
+# docker-compose.yml – Email Management RL Environment
+# ---------------------------------------------------------------------------
+# Usage:
+#   docker-compose up app        # Launch Gradio UI at http://localhost:7860
+#   docker-compose up inference  # Run the baseline inference script
+# ---------------------------------------------------------------------------
+
+version: "3.9"
+
+services:
+  # ── Gradio Web UI ──────────────────────────────────────────────────────────
+  app:
+    build: .
+    image: email-rl-env:latest
+    container_name: email_rl_app
+    environment:
+      RUN_MODE: app
+      API_BASE_URL: ${API_BASE_URL:-https://api.openai.com/v1}
+      MODEL_NAME: ${MODEL_NAME:-gpt-3.5-turbo}
+      HF_TOKEN: ${HF_TOKEN:-}
+    ports:
+      - "7860:7860"
+    restart: unless-stopped
+
+  # ── Baseline Inference Script ──────────────────────────────────────────────
+  inference:
+    build: .
+    image: email-rl-env:latest
+    container_name: email_rl_inference
+    environment:
+      RUN_MODE: inference
+      API_BASE_URL: ${API_BASE_URL:-https://api.openai.com/v1}
+      MODEL_NAME: ${MODEL_NAME:-gpt-3.5-turbo}
+      HF_TOKEN: ${HF_TOKEN:-}
+    profiles:
+      - inference   # only starts when explicitly requested
