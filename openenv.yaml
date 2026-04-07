@@ -1,0 +1,123 @@
+name: email-management-env
+version: "1.0.0"
+description: >
+  A reinforcement learning environment that simulates a real-world email inbox.
+  An AI agent must classify emails, assign priorities, and draft professional
+  replies across three tasks of increasing difficulty.
+
+author: Sriram Thiruveedhula
+license: MIT
+
+# ── Environment specification ──────────────────────────────────────────────
+
+environment:
+  class: env.EmailManagementEnv
+  entry_point: env/email_env.py
+
+  observation_space:
+    type: dict
+    fields:
+      email_id:         { type: string }
+      subject:          { type: string }
+      sender:           { type: string }
+      body:             { type: string }
+      urgency_hint:     { type: string, nullable: true }
+      timestamp:        { type: string, format: iso8601 }
+      task:             { type: string }
+      difficulty:       { type: string, enum: [easy, medium, hard] }
+      step_number:      { type: integer, minimum: 0 }
+      remaining_emails: { type: integer, minimum: 0 }
+      instructions:     { type: string }
+
+  action_space:
+    type: dict
+    fields:
+      action_type:
+        type: string
+        enum:
+          - classify_email
+          - prioritize_email
+          - reply_email
+      label:
+        type: string
+        enum: [spam, important, normal]
+        nullable: true
+        description: "Required when action_type=classify_email"
+      priority:
+        type: string
+        enum: [high, medium, low]
+        nullable: true
+        description: "Required when action_type=prioritize_email"
+      reply_text:
+        type: string
+        nullable: true
+        description: "Required when action_type=reply_email"
+
+  reward_space:
+    type: float
+    minimum: -1.0
+    maximum:  1.0
+    description: >
+      Positive for correct/partial actions, negative for wrong actions.
+      -1.0 is reserved for using the completely wrong action type.
+
+# ── Tasks ──────────────────────────────────────────────────────────────────
+
+tasks:
+  - name: spam_detection
+    difficulty: easy
+    description: >
+      Classify each email as spam, important, or normal.
+      Tests basic text understanding and spam signal recognition.
+    action_type: classify_email
+    grader: env.graders.grade_classification
+    score_range: [0.0, 1.0]
+    num_emails: 10
+
+  - name: email_prioritization
+    difficulty: medium
+    description: >
+      Assign a priority level (high, medium, low) to each email.
+      Requires understanding urgency cues and business context.
+    action_type: prioritize_email
+    grader: env.graders.grade_prioritization
+    score_range: [0.0, 1.0]
+    num_emails: 10
+
+  - name: auto_reply
+    difficulty: hard
+    description: >
+      Draft professional replies for non-spam emails; respond with
+      'no_reply' for spam. Scored on keyword coverage and relevance.
+    action_type: reply_email
+    grader: env.graders.grade_reply
+    score_range: [0.0, 1.0]
+    num_emails: 10
+
+# ── Inference script ───────────────────────────────────────────────────────
+
+inference:
+  script: inference.py
+  env_vars:
+    API_BASE_URL:
+      description: "Base URL of an OpenAI-compatible API"
+      default: "https://api.openai.com/v1"
+    MODEL_NAME:
+      description: "Model identifier (e.g. gpt-4o-mini, mistralai/Mistral-7B-Instruct-v0.1)"
+      default: "gpt-3.5-turbo"
+    HF_TOKEN:
+      description: "HuggingFace / API bearer token"
+      required: false
+      fallback: "rule-based heuristic agent"
+
+# ── Docker / deployment ────────────────────────────────────────────────────
+
+docker:
+  base_image: python:3.11-slim
+  dockerfile: Dockerfile
+  port: 7860
+
+huggingface_spaces:
+  sdk: gradio
+  python_version: "3.11"
+  app_file: app.py
