@@ -1,3 +1,11 @@
+---
+title: Email Management RL Env
+emoji: 📧
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+---
 # 📬 Email Management RL Environment
 
 An **OpenEnv-compatible reinforcement learning environment** that simulates a
