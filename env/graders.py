@@ -31,10 +31,10 @@ def _keyword_overlap(reply: str, keywords: List[str]) -> float:
     Returns 0.0 when keywords list is empty (spam – no reply expected).
     """
     if not keywords:
-        return 0.0
+        return 0.01
     norm_reply = _normalise(reply)
     hits = sum(1 for kw in keywords if _normalise(kw) in norm_reply)
-    return hits / len(keywords)
+    return _clamp(hits / len(keywords))
 
 
 # ---------------------------------------------------------------------------
