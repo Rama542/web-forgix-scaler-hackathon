@@ -71,7 +71,7 @@ tasks:
       Tests basic text understanding and spam signal recognition.
     action_type: classify_email
     grader: env.graders.grade_classification
-    score_range: [0.0, 1.0]
+    score_range: [0.01, 0.99]
     num_emails: 10
 
   - name: email_prioritization
@@ -81,7 +81,7 @@ tasks:
       Requires understanding urgency cues and business context.
     action_type: prioritize_email
     grader: env.graders.grade_prioritization
-    score_range: [0.0, 1.0]
+    score_range: [0.01, 0.99]
     num_emails: 10
 
   - name: auto_reply
@@ -91,7 +91,7 @@ tasks:
       'no_reply' for spam. Scored on keyword coverage and relevance.
     action_type: reply_email
     grader: env.graders.grade_reply
-    score_range: [0.0, 1.0]
+    score_range: [0.01, 0.99]
     num_emails: 10
 
 # ── Inference script ───────────────────────────────────────────────────────

@@ -8,6 +8,7 @@ They are pure functions – same input always produces the same output.
 from __future__ import annotations
 
 import re
+import math
 from typing import Any, Dict, List, Optional
 
 
@@ -25,8 +26,11 @@ def _safe(score: float) -> float:
     """
     try:
         v = float(score)
+        if math.isnan(v):
+            v = 0.5
     except (TypeError, ValueError):
         v = 0.5
+    
     if v <= 0.0:
         return 0.001
     if v >= 1.0:

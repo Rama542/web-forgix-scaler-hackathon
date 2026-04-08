@@ -8,6 +8,7 @@ reply to a stream of incoming emails across three tasks of increasing difficulty
 from __future__ import annotations
 
 import copy
+import math
 from typing import Any, Dict, List, Optional, Tuple
 
 from .graders import compute_score
@@ -54,6 +55,8 @@ class EmailManagementEnv:
         """Clamp a value to strictly open interval (0.0, 1.0)."""
         try:
             v = float(v)
+            if math.isnan(v):
+                v = 0.5
         except (TypeError, ValueError):
             v = 0.5
         if v <= 0.0:
