@@ -82,7 +82,7 @@ _LABEL_SCORE: Dict[tuple, float] = {
 }
 
 
-def grade_classification(predicted_label: str, true_label: str) -> float:
+def grade_classification(predicted_label: str, true_label: str, *args, **kwargs) -> float:
     """
     Score email classification.
 
@@ -103,7 +103,7 @@ def grade_classification(predicted_label: str, true_label: str) -> float:
 _PRIORITY_ORDINAL: Dict[str, int] = {"high": 2, "medium": 1, "low": 0}
 
 
-def grade_prioritization(predicted_priority: str, true_priority: str) -> float:
+def grade_prioritization(predicted_priority: str, true_priority: str, *args, **kwargs) -> float:
     """
     Score email prioritization.
 
@@ -132,7 +132,7 @@ def grade_prioritization(predicted_priority: str, true_priority: str) -> float:
 # Task 3 – Auto-Reply Generation
 # ---------------------------------------------------------------------------
 
-def grade_reply(reply_text: str, true_label: str, ideal_keywords: List[str]) -> float:
+def grade_reply(reply_text: str, true_label: str, ideal_keywords: List[str] = None, *args, **kwargs) -> float:
     """
     Score auto-generated email replies.
 
