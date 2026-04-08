@@ -384,8 +384,8 @@ def main() -> None:
     print("=" * 68)
     overall_success = all(r["success"] for r in results)
     for r in results:
-        status = "✓ PASS" if r["success"] else "✗ FAIL"
-        print(f"  {status}  {r['task']:<28}  mean_reward={r['mean_reward']:.4f}  steps={r['steps']}")
+        status = "PASS" if r["success"] else "FAIL"
+        print(f"  [{status}]  {r['task']:<28}  mean_reward={r['mean_reward']:.4f}  steps={r['steps']}")
     print("-" * 68)
     print(f"  Overall: {'PASSED' if overall_success else 'FAILED'}")
     print("=" * 68)
