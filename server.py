@@ -39,9 +39,18 @@ async def step(request: Request):
     
     next_obs, reward, done, info = env_instance.step(action)
     
+    # Clamp reward to strictly (0, 1) as required by evaluator
+    raw_reward = float(reward.value) if hasattr(reward, 'value') else float(reward)
+    if raw_reward <= 0.0:
+        safe_reward = 0.001
+    elif raw_reward >= 1.0:
+        safe_reward = 0.999
+    else:
+        safe_reward = raw_reward
+    
     return {
         "observation": next_obs.model_dump() if next_obs else None,
-        "reward": reward.value,  # Must return float for OpenEnv wrapper
+        "reward": safe_reward,
         "done": done,
         "info": info
     }
