@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request
 from pydantic import BaseModel
+import math
 from typing import Any, Dict, Optional
 
 from env.email_env import EmailManagementEnv
@@ -40,7 +41,13 @@ async def step(request: Request):
     next_obs, reward, done, info = env_instance.step(action)
     
     # Clamp reward to strictly (0, 1) as required by evaluator
-    raw_reward = float(reward.value) if hasattr(reward, 'value') else float(reward)
+    try:
+        raw_reward = float(reward.value) if hasattr(reward, 'value') else float(reward)
+        if math.isnan(raw_reward):
+            raw_reward = 0.5
+    except Exception:
+        raw_reward = 0.5
+
     if raw_reward <= 0.0:
         safe_reward = 0.001
     elif raw_reward >= 1.0:

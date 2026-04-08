@@ -8,6 +8,7 @@ reply to a stream of incoming emails across three tasks of increasing difficulty
 from __future__ import annotations
 
 import copy
+import math
 from typing import Any, Dict, List, Optional, Tuple
 
 from .graders import compute_score
@@ -54,6 +55,8 @@ class EmailManagementEnv:
         """Clamp a value to strictly open interval (0.0, 1.0)."""
         try:
             v = float(v)
+            if math.isnan(v):
+                v = 0.5
         except (TypeError, ValueError):
             v = 0.5
         if v <= 0.0:
@@ -184,7 +187,7 @@ class EmailManagementEnv:
         if not action.validate_for_task(self._task_name):
             reward = Reward(
                 value=self._REWARD_BAD_ACTION,
-                breakdown={"type_penalty": self._REWARD_BAD_ACTION},
+                breakdown={"type_penalty": self._safe(self._REWARD_BAD_ACTION)},
                 explanation=(
                     f"Wrong action type '{action.action_type}' for task '{self._task_name}'. "
                     f"Expected action type matching the task."
@@ -213,7 +216,7 @@ class EmailManagementEnv:
 
         reward = Reward(
             value=reward_value,
-            breakdown={"correctness": score, "scaled_reward": reward_value},
+            breakdown={"correctness": self._safe(score), "scaled_reward": self._safe(reward_value)},
             explanation=explanation,
         )
         return reward, {"score": self._safe(score), "error": None}
