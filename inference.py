@@ -59,13 +59,13 @@ def log_step(
     done_str  = "true" if done else "false"
     error_str = error if error else "null"
     print(
-        f"[STEP] step={step} action={action} reward={reward:.2f} done={done_str} error={error_str}",
+        f"[STEP] step={step} action={action} reward={reward:.4f} done={done_str} error={error_str}",
         flush=True,
     )
 
 
 def log_end(success: bool, steps: int, rewards: List[float]) -> None:
-    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+    rewards_str = ",".join(f"{r:.4f}" for r in rewards)
     print(f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}", flush=True)
 
 
@@ -308,17 +308,26 @@ def run_task(task_name: str, client: Optional[Any]) -> Dict[str, Any]:
         action, action_str = build_action(task_name, obs, client)
 
         try:
-            obs, reward, done, info = env.step(action)
+            obs, raw_reward, done, info = env.step(action)
         except Exception as exc:
             log_step(step=step, action=action_str, reward=0.01, done=True, error=str(exc))
             log_end(success=False, steps=step, rewards=all_rewards)
             return {"task": task_name, "success": False, "steps": step, "rewards": all_rewards}
 
-        all_rewards.append(reward.value)
+        # safely extract numeric reward and clamp to strict (0, 1) bounds
+        numeric_reward = float(getattr(raw_reward, "value", raw_reward))
+        if numeric_reward <= 0.0:
+            safe_reward = 0.0001
+        elif numeric_reward >= 1.0:
+            safe_reward = 0.9999
+        else:
+            safe_reward = numeric_reward
+
+        all_rewards.append(safe_reward)
         log_step(
             step=step,
             action=action_str,
-            reward=reward.value,
+            reward=safe_reward,
             done=done,
             error=info.get("error"),
         )
@@ -326,8 +335,13 @@ def run_task(task_name: str, client: Optional[Any]) -> Dict[str, Any]:
         if done:
             break
 
-    mean_reward = sum(all_rewards) / len(all_rewards) if all_rewards else 0.0
-    success = mean_reward > 0
+    mean_reward = sum(all_rewards) / len(all_rewards) if all_rewards else 0.0001
+    if mean_reward <= 0.0:
+        mean_reward = 0.0001
+    elif mean_reward >= 1.0:
+        mean_reward = 0.9999
+
+    success = mean_reward > 0.0001
 
     log_end(success=success, steps=step, rewards=all_rewards)
     print(f"[INFO] mean_reward={mean_reward:.4f}\n", flush=True)
