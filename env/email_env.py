@@ -42,12 +42,12 @@ class EmailManagementEnv:
                 break
     """
 
-    # Reward constants – strictly in (-1.0, 1.0)
+    # Reward constants – strictly in (0.0, 1.0), no negatives allowed
     _REWARD_CORRECT    =  0.99
-    _REWARD_PARTIAL_HI =  0.50
-    _REWARD_PARTIAL_LO =  0.20
-    _REWARD_WRONG      = -0.49
-    _REWARD_BAD_ACTION = -0.99   # wrong action type for the task
+    _REWARD_PARTIAL_HI =  0.70
+    _REWARD_PARTIAL_LO =  0.40
+    _REWARD_WRONG      =  0.10
+    _REWARD_BAD_ACTION =  0.01   # wrong action type for the task
 
     def __init__(self, task_name: str = "spam_detection") -> None:
         self._task_name = task_name
@@ -175,7 +175,7 @@ class EmailManagementEnv:
                     f"Expected action type matching the task."
                 ),
             )
-            return reward, {"score": 0.0, "error": "wrong_action_type"}
+            return reward, {"score": 0.01, "error": "wrong_action_type"}
 
         # --- build action payload -----------------------------------------
         action_dict: Dict[str, Any] = {"action_type": action.action_type.value}
@@ -222,7 +222,7 @@ class EmailManagementEnv:
             return self._REWARD_CORRECT, f"Excellent! Score {score:.2f} – fully correct."
         if score >= 0.5:
             return self._REWARD_PARTIAL_HI, f"Good. Score {score:.2f} – partially correct."
-        if score >= 0.2:
+        if score >= 0.3:
             return self._REWARD_PARTIAL_LO, f"Marginal. Score {score:.2f} – barely correct."
         return self._REWARD_WRONG, f"Incorrect. Score {score:.2f} – wrong answer."
 

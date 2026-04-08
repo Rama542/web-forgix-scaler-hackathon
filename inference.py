@@ -310,7 +310,7 @@ def run_task(task_name: str, client: Optional[Any]) -> Dict[str, Any]:
         try:
             obs, reward, done, info = env.step(action)
         except Exception as exc:
-            log_step(step=step, action=action_str, reward=0.0, done=True, error=str(exc))
+            log_step(step=step, action=action_str, reward=0.01, done=True, error=str(exc))
             log_end(success=False, steps=step, rewards=all_rewards)
             return {"task": task_name, "success": False, "steps": step, "rewards": all_rewards}
 
