@@ -193,7 +193,7 @@ def compute_score(
     Dispatch to the correct grader based on task name.
 
     Returns:
-        float strictly in (0.0, 1.0)
+        float strictly in (0.01, 0.99)
     """
     try:
         if task_name == "spam_detection":
