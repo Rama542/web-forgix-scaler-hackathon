@@ -42,12 +42,12 @@ class EmailManagementEnv:
                 break
     """
 
-    # Reward constants
-    _REWARD_CORRECT    =  1.0
-    _REWARD_PARTIAL_HI =  0.5
-    _REWARD_PARTIAL_LO =  0.2
-    _REWARD_WRONG      = -0.5
-    _REWARD_BAD_ACTION = -1.0   # wrong action type for the task
+    # Reward constants – strictly in (-1.0, 1.0)
+    _REWARD_CORRECT    =  0.99
+    _REWARD_PARTIAL_HI =  0.50
+    _REWARD_PARTIAL_LO =  0.20
+    _REWARD_WRONG      = -0.49
+    _REWARD_BAD_ACTION = -0.99   # wrong action type for the task
 
     def __init__(self, task_name: str = "spam_detection") -> None:
         self._task_name = task_name
