@@ -117,7 +117,7 @@ class Action(BaseModel):
 class Reward(BaseModel):
     """Reward signal returned after each step."""
 
-    value: float = Field(..., ge=-1.0, le=1.0, description="Reward in [-1, 1]")
+    value: float = Field(..., gt=0.0, lt=1.0, description="Reward strictly in (0, 1)")
     breakdown: Dict[str, float] = Field(
         default_factory=dict,
         description="Per-component reward breakdown for interpretability"
