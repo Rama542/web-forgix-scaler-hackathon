@@ -30,6 +30,9 @@ from openai import OpenAI
 from env.email_env import EmailManagementEnv
 from env.models import Action, ActionType, EmailLabel, PriorityLevel
 
+def clamp_score(x):
+    return max(0.0001, min(float(x), 0.9999))
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -65,11 +68,12 @@ def log_step(
 
 
 def log_end(success: bool, steps: int, rewards: List[float]) -> None:
-    # Output single mean task score strictly in (0, 1) as required by the platform
-    mean_r = sum(rewards) / len(rewards) if rewards else 0.5
-    # Clamp to strictly open interval (0, 1)
-    mean_r = max(0.001, min(0.999, float(mean_r)))
-    print(f"[END] success={str(success).lower()} steps={steps} rewards={mean_r:.4f}", flush=True)
+    # clamp each reward again just to be safe
+    safe_rewards = [max(0.0001, min(r, 0.9999)) for r in rewards]
+
+    reward_str = ",".join(f"{r:.4f}" for r in safe_rewards)
+
+    print(f"[END] success={str(success).lower()} steps={steps} rewards={reward_str}", flush=True)
 
 
 # ---------------------------------------------------------------------------
@@ -319,12 +323,7 @@ def run_task(task_name: str, client: Optional[Any]) -> Dict[str, Any]:
 
         # safely extract numeric reward and clamp to strict (0, 1) bounds
         numeric_reward = float(getattr(raw_reward, "value", raw_reward))
-        if numeric_reward <= 0.0:
-            safe_reward = 0.0001
-        elif numeric_reward >= 1.0:
-            safe_reward = 0.9999
-        else:
-            safe_reward = numeric_reward
+        safe_reward = clamp_score(numeric_reward)
 
         all_rewards.append(safe_reward)
         log_step(
@@ -339,10 +338,7 @@ def run_task(task_name: str, client: Optional[Any]) -> Dict[str, Any]:
             break
 
     mean_reward = sum(all_rewards) / len(all_rewards) if all_rewards else 0.0001
-    if mean_reward <= 0.0:
-        mean_reward = 0.0001
-    elif mean_reward >= 1.0:
-        mean_reward = 0.9999
+    mean_reward = clamp_score(mean_reward)
 
     success = mean_reward > 0.0001
 
