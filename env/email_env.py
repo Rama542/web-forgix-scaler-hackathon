@@ -43,11 +43,24 @@ class EmailManagementEnv:
     """
 
     # Reward constants – strictly in (0.0, 1.0), no negatives allowed
-    _REWARD_CORRECT    =  0.99
+    _REWARD_CORRECT    =  0.95
     _REWARD_PARTIAL_HI =  0.70
     _REWARD_PARTIAL_LO =  0.40
     _REWARD_WRONG      =  0.10
-    _REWARD_BAD_ACTION =  0.01   # wrong action type for the task
+    _REWARD_BAD_ACTION =  0.05   # wrong action type for the task
+
+    @staticmethod
+    def _safe(v: float) -> float:
+        """Clamp a value to strictly open interval (0.0, 1.0)."""
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            v = 0.5
+        if v <= 0.0:
+            return 0.001
+        if v >= 1.0:
+            return 0.999
+        return v
 
     def __init__(self, task_name: str = "spam_detection") -> None:
         self._task_name = task_name
@@ -100,7 +113,7 @@ class EmailManagementEnv:
         reward, info = self._compute_reward(action, email)
 
         self._cumulative_reward += reward.value
-        self._scores.append(info.get("score", 0.0))
+        self._scores.append(self._safe(info.get("score", 0.5)))
         self._step_count += 1
         self._cursor += 1
 
@@ -109,11 +122,13 @@ class EmailManagementEnv:
 
         next_obs = None if self._done else self._build_observation()
 
+        mean_score = self._safe(sum(self._scores) / len(self._scores))
         info.update({
             "email_id":         email["email_id"],
             "step":             self._step_count,
             "cumulative_reward": self._cumulative_reward,
-            "mean_score":       sum(self._scores) / len(self._scores),
+            "mean_score":       mean_score,
+            "score":            self._safe(info.get("score", 0.5)),
         })
 
         return next_obs, reward, self._done, info
@@ -175,7 +190,7 @@ class EmailManagementEnv:
                     f"Expected action type matching the task."
                 ),
             )
-            return reward, {"score": 0.01, "error": "wrong_action_type"}
+            return reward, {"score": self._safe(0.05), "error": "wrong_action_type"}
 
         # --- build action payload -----------------------------------------
         action_dict: Dict[str, Any] = {"action_type": action.action_type.value}
@@ -201,7 +216,7 @@ class EmailManagementEnv:
             breakdown={"correctness": score, "scaled_reward": reward_value},
             explanation=explanation,
         )
-        return reward, {"score": score, "error": None}
+        return reward, {"score": self._safe(score), "error": None}
 
     def _score_to_reward(
         self,
