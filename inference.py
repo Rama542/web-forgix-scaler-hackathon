@@ -65,8 +65,11 @@ def log_step(
 
 
 def log_end(success: bool, steps: int, rewards: List[float]) -> None:
-    rewards_str = ",".join(f"{r:.4f}" for r in rewards)
-    print(f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}", flush=True)
+    # Output single mean task score strictly in (0, 1) as required by the platform
+    mean_r = sum(rewards) / len(rewards) if rewards else 0.5
+    # Clamp to strictly open interval (0, 1)
+    mean_r = max(0.001, min(0.999, float(mean_r)))
+    print(f"[END] success={str(success).lower()} steps={steps} rewards={mean_r:.4f}", flush=True)
 
 
 # ---------------------------------------------------------------------------
