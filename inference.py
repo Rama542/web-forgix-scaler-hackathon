@@ -36,10 +36,7 @@ from env.models import Action, ActionType, EmailLabel, PriorityLevel
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME   = os.environ.get("MODEL_NAME",   "gpt-4.1-mini")
-HF_TOKEN     = os.environ.get("HF_TOKEN")
-
-if HF_TOKEN is None:
-    raise ValueError("HF_TOKEN environment variable is required")
+HF_TOKEN     = os.environ.get("HF_TOKEN", "")  # Optional: falls back to rule-based agent
 
 TASK_NAMES: List[str] = ["spam_detection", "email_prioritization", "auto_reply"]
 ENV_NAME = "EmailManagementEnv"
@@ -77,7 +74,13 @@ def log_end(success: bool, steps: int, rewards: List[float]) -> None:
 # ---------------------------------------------------------------------------
 
 def _build_client() -> Optional[Any]:
-    return OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
+    """Build OpenAI client if HF_TOKEN is available, otherwise return None for rule-based fallback."""
+    if not HF_TOKEN:
+        return None
+    try:
+        return OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
+    except Exception:
+        return None
 
 
 def _call_llm(client: Any, system_prompt: str, user_prompt: str) -> str:
@@ -195,37 +198,46 @@ _REPLY_SYSTEM = textwrap.dedent("""
 
 
 def _llm_classify(client: Any, obs_dict: Dict[str, Any]) -> str:
-    user_prompt = (
-        f"Subject: {obs_dict['subject']}\n"
-        f"From: {obs_dict['sender']}\n"
-        f"Body:\n{obs_dict['body']}"
-    )
-    label = _call_llm(client, _CLASSIFY_SYSTEM, user_prompt).lower().strip()
-    if label not in ("spam", "important", "normal"):
-        label = "normal"
-    return label
+    try:
+        user_prompt = (
+            f"Subject: {obs_dict['subject']}\n"
+            f"From: {obs_dict['sender']}\n"
+            f"Body:\n{obs_dict['body']}"
+        )
+        label = _call_llm(client, _CLASSIFY_SYSTEM, user_prompt).lower().strip()
+        if label not in ("spam", "important", "normal"):
+            label = "normal"
+        return label
+    except Exception:
+        return _rule_classify(obs_dict["body"], obs_dict["subject"], obs_dict["sender"])
 
 
 def _llm_prioritize(client: Any, obs_dict: Dict[str, Any]) -> str:
-    user_prompt = (
-        f"Subject: {obs_dict['subject']}\n"
-        f"From: {obs_dict['sender']}\n"
-        f"Urgency hint: {obs_dict.get('urgency_hint') or 'none'}\n"
-        f"Body:\n{obs_dict['body']}"
-    )
-    level = _call_llm(client, _PRIORITIZE_SYSTEM, user_prompt).lower().strip()
-    if level not in ("high", "medium", "low"):
-        level = "medium"
-    return level
+    try:
+        user_prompt = (
+            f"Subject: {obs_dict['subject']}\n"
+            f"From: {obs_dict['sender']}\n"
+            f"Urgency hint: {obs_dict.get('urgency_hint') or 'none'}\n"
+            f"Body:\n{obs_dict['body']}"
+        )
+        level = _call_llm(client, _PRIORITIZE_SYSTEM, user_prompt).lower().strip()
+        if level not in ("high", "medium", "low"):
+            level = "medium"
+        return level
+    except Exception:
+        return _rule_prioritize(obs_dict["body"], obs_dict["subject"], obs_dict.get("urgency_hint"))
 
 
 def _llm_reply(client: Any, obs_dict: Dict[str, Any]) -> str:
-    user_prompt = (
-        f"Subject: {obs_dict['subject']}\n"
-        f"From: {obs_dict['sender']}\n"
-        f"Body:\n{obs_dict['body']}"
-    )
-    return _call_llm(client, _REPLY_SYSTEM, user_prompt)
+    try:
+        user_prompt = (
+            f"Subject: {obs_dict['subject']}\n"
+            f"From: {obs_dict['sender']}\n"
+            f"Body:\n{obs_dict['body']}"
+        )
+        return _call_llm(client, _REPLY_SYSTEM, user_prompt)
+    except Exception:
+        return _rule_reply(obs_dict["body"], obs_dict["subject"], "")
 
 
 # ---------------------------------------------------------------------------
