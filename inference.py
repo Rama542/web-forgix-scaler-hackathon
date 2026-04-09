@@ -67,14 +67,16 @@ def log_step(
     )
 
 
-def log_end(success: bool, steps: int, rewards: List[float]) -> None:
+def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
     # clamp each reward again just to be safe
     safe_rewards = [max(0.0001, min(r, 0.9999)) for r in rewards]
-
+    safe_score = max(0.0001, min(float(score), 0.9999))
     reward_str = ",".join(f"{r:.4f}" for r in safe_rewards)
 
-    print(f"[END] success={str(success).lower()} steps={steps} rewards={reward_str}", flush=True)
-
+    print(
+        f"[END] success={str(success).lower()} steps={steps} score={safe_score:.4f} rewards={reward_str}",
+        flush=True,
+    )
 
 # ---------------------------------------------------------------------------
 # LLM client
@@ -301,7 +303,6 @@ def build_action(
 # ---------------------------------------------------------------------------
 
 def run_task(task_name: str, client: Optional[Any]) -> Dict[str, Any]:
-    """Run one complete episode for the given task. Returns summary dict."""
     env = EmailManagementEnv(task_name=task_name)
     obs = env.reset()
 
@@ -318,10 +319,9 @@ def run_task(task_name: str, client: Optional[Any]) -> Dict[str, Any]:
             obs, raw_reward, done, info = env.step(action)
         except Exception as exc:
             log_step(step=step, action=action_str, reward=0.01, done=True, error=str(exc))
-            log_end(success=False, steps=step, rewards=all_rewards)
+            log_end(success=False, steps=step, score=0.0001, rewards=all_rewards)  # ← score added
             return {"task": task_name, "success": False, "steps": step, "rewards": all_rewards}
 
-        # safely extract numeric reward and clamp to strict (0, 1) bounds
         numeric_reward = float(getattr(raw_reward, "value", raw_reward))
         safe_reward = clamp_score(numeric_reward)
 
@@ -339,10 +339,9 @@ def run_task(task_name: str, client: Optional[Any]) -> Dict[str, Any]:
 
     mean_reward = sum(all_rewards) / len(all_rewards) if all_rewards else 0.0001
     mean_reward = clamp_score(mean_reward)
-
     success = mean_reward > 0.0001
 
-    log_end(success=success, steps=step, rewards=all_rewards)
+    log_end(success=success, steps=step, score=mean_reward, rewards=all_rewards)  # ← score added
     print(f"[INFO] mean_reward={mean_reward:.4f}\n", flush=True)
 
     return {
