@@ -28,15 +28,14 @@ from env.models import Action, ActionType, EmailLabel, PriorityLevel
 # ---------------------------------------------------------------------------
 
 def clamp_score(x: float) -> float:
-    """Strictly open interval (0, 1) — never 0.0 or 1.0."""
     try:
         v = float(x)
     except Exception:
-        return 0.0001
+        return 0.01
     if v <= 0.0:
-        return 0.0001
+        return 0.01
     if v >= 1.0:
-        return 0.9999
+        return 0.99
     return v
 
 

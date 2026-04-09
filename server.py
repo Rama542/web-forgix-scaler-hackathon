@@ -49,9 +49,9 @@ async def step(request: Request):
         raw_reward = 0.5
 
     if raw_reward <= 0.0:
-        safe_reward = 0.001
-    elif raw_reward >= 1.0:
-        safe_reward = 0.999
+    safe_reward = 0.01
+elif raw_reward >= 1.0:
+    safe_reward = 0.99
     else:
         safe_reward = raw_reward
     
