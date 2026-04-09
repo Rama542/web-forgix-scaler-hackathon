@@ -9,6 +9,21 @@ from env.models import Action
 app = FastAPI(title="Email Management OpenEnv Server")
 env_instance = None
 
+
+def _clamp(v: Any) -> float:
+    try:
+        f = float(v)
+        if math.isnan(f) or math.isinf(f):
+            return 0.5
+    except Exception:
+        return 0.5
+    if f <= 0.0:
+        return 0.001
+    if f >= 1.0:
+        return 0.999
+    return f
+
+
 @app.post("/reset")
 async def reset(request: Request):
     global env_instance
@@ -41,25 +56,28 @@ async def step(request: Request):
     next_obs, reward, done, info = env_instance.step(action)
     
     # Clamp reward to strictly (0, 1) as required by evaluator
-    try:
-        raw_reward = float(reward.value) if hasattr(reward, 'value') else float(reward)
-        if math.isnan(raw_reward):
-            raw_reward = 0.5
-    except Exception:
-        raw_reward = 0.5
+    raw_reward = float(reward.value) if hasattr(reward, "value") else float(reward)
+    safe_reward = _clamp(raw_reward)
 
-    if raw_reward <= 0.0:
-    safe_reward = 0.01
-elif raw_reward >= 1.0:
-    safe_reward = 0.99
-    else:
-        safe_reward = raw_reward
+    safe_info = {}
+    for k, v in info.items():
+        if isinstance(v, float) or isinstance(v, int):
+             safe_info[k] = _clamp(v)
+        else:
+             safe_info[k] = v
+
+    # Ensure "score" and "mean_score" exist in info and are safely clamped
+    if "score" in info:
+        safe_info["score"] = _clamp(info["score"])
+    if "mean_score" in info:
+        safe_info["mean_score"] = _clamp(info["mean_score"])
     
     return {
         "observation": next_obs.model_dump() if next_obs else None,
         "reward": safe_reward,
+        "score": safe_reward,
         "done": done,
-        "info": info
+        "info": safe_info
     }
 
 import uvicorn

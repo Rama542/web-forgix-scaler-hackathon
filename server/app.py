@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from typing import Any, Dict, Optional
 
 from env.email_env import EmailManagementEnv
-from env.models import Action
+from env.models import Action 
 
 app = FastAPI(title="Email Management OpenEnv Server")
 env_instance = None
