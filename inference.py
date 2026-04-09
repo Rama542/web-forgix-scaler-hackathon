@@ -133,14 +133,14 @@ def _rule_classify(body: str, subject: str, sender: str) -> str:
         return "spam"
     if any(c in text for c in ["urgent", "action required", "asap", "deadline", "outage", "alert", "down"]):
         return "important"
-    if any(c in text for c in ["meeting", "review", "report", "team", "scheduled", "maintenance", "billing"]):
+    if any(c in text for c in ["meeting", "review", "report", "scheduled", "billing"]):
         return "important"
     return "normal"
 
 
 def _rule_prioritize(body: str, subject: str, urgency_hint: Optional[str]) -> str:
     text = (subject + " " + body + " " + (urgency_hint or "")).lower()
-    if any(kw in text for kw in ["urgent", "outage", "down", "action required", "asap", "deadline"]):
+    if any(kw in text for kw in ["urgent", "outage", "down", "action required", "asap", "deadline", "anomaly", "unusually"]):
         return "high"
     if any(kw in text for kw in ["scheduled", "review", "billing", "maintenance", "report"]):
         return "medium"
@@ -195,14 +195,12 @@ def _rule_reply(body: str, subject: str) -> str:
 _CLASSIFY_SYSTEM = textwrap.dedent("""
     You are an expert email classifier. Given an email, respond with EXACTLY one of:
     spam | important | normal
-    No explanation. Just the single 
-    label.
+    No explanation. Just the single label.
 """).strip()
 
 _PRIORITIZE_SYSTEM = textwrap.dedent("""
-
     You are an email triage specialist. Given an email, respond with EXACTLY one of:
-    hig-coreh | medium | low
+    high | medium | low
     No explanation. Just the single priority level.
 """).strip()
 
