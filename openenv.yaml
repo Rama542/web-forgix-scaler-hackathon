@@ -55,11 +55,11 @@ environment:
 
   reward_space:
     type: float
-    minimum: -1.0
-    maximum:  1.0
+    minimum: 0.0
+    maximum: 1.0
     description: >
-      Positive for correct/partial actions, negative for wrong actions.
-      -1.0 is reserved for using the completely wrong action type.
+      Score strictly between 0 and 1 (exclusive). Never 0.0 or 1.0.
+      Higher is better. All values clamped to (0.001, 0.999).
 
 # ── Tasks ──────────────────────────────────────────────────────────────────
 
@@ -118,6 +118,6 @@ docker:
   port: 7860
 
 huggingface_spaces:
-  sdk: gradio
+  sdk: docker
   python_version: "3.11"
-  app_file: app.py
+  app_file: server.py

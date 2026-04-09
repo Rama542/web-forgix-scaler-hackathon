@@ -1,17 +1,12 @@
 """
-inference.py – Baseline agent that runs all three email-management tasks.
+inference.py – Baseline agent for the Email Management RL Environment.
 
-The agent calls an OpenAI-compatible LLM to decide what action to take for
-each email, then logs results in the required format:
+Output format (STRICTLY followed):
+    [START] task=<name> env=<env> model=<model>
+    [STEP]  step=<n> action=<str> reward=<0.0000> done=<true|false> error=<msg|null>
+    [END]   success=<true|false> steps=<n> score=<0.0000> rewards=<r1,r2,...>
 
-    [START] task=... env=EmailManagementEnv model=...
-    [STEP]  step=N action=... reward=0.00 done=false error=null
-    [END]   success=true steps=N rewards=0.00,0.00,1.00
-
-Environment variables:
-    API_BASE_URL  – base URL of the OpenAI-compatible API  (default: https://api.openai.com/v1)
-    MODEL_NAME    – model identifier                        (default: gpt-4.1-mini)
-    HF_TOKEN      – HuggingFace / API bearer token          (REQUIRED – no default)
+All reward/score values are strictly in (0, 1) — never 0.0 or 1.0.
 """
 
 from __future__ import annotations
@@ -22,16 +17,27 @@ import time
 import textwrap
 from typing import Any, Dict, List, Optional, Tuple
 
-# ---------------------------------------------------------------------------
-# OpenAI import (required by submission guidelines)
-# ---------------------------------------------------------------------------
 from openai import OpenAI
 
 from env.email_env import EmailManagementEnv
 from env.models import Action, ActionType, EmailLabel, PriorityLevel
 
-def clamp_score(x):
-    return max(0.0001, min(float(x), 0.9999))
+
+# ---------------------------------------------------------------------------
+# Clamp helper
+# ---------------------------------------------------------------------------
+
+def clamp_score(x: float) -> float:
+    try:
+        v = float(x)
+    except Exception:
+        return 0.01
+    if v <= 0.0:
+        return 0.01
+    if v >= 1.0:
+        return 0.99
+    return v
+
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -39,13 +45,14 @@ def clamp_score(x):
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME   = os.environ.get("MODEL_NAME",   "gpt-4.1-mini")
-HF_TOKEN     = os.environ.get("HF_TOKEN", "")  # Optional: falls back to rule-based agent
+HF_TOKEN     = os.environ.get("HF_TOKEN", "")
 
 TASK_NAMES: List[str] = ["spam_detection", "email_prioritization", "auto_reply"]
 ENV_NAME = "EmailManagementEnv"
 
+
 # ---------------------------------------------------------------------------
-# Logging helpers
+# Logging helpers — format must match spec EXACTLY
 # ---------------------------------------------------------------------------
 
 def log_start(task: str, model: str) -> None:
@@ -61,19 +68,25 @@ def log_step(
 ) -> None:
     done_str  = "true" if done else "false"
     error_str = error if error else "null"
+    safe_r    = clamp_score(reward)
+    # action string must have no internal newlines
+    action_clean = action.replace("\n", " ").replace("\r", "")
     print(
-        f"[STEP] step={step} action={action} reward={reward:.4f} done={done_str} error={error_str}",
+        f"[STEP] step={step} action={action_clean} reward={safe_r:.4f} "
+        f"done={done_str} error={error_str}",
         flush=True,
     )
 
 
-def log_end(success: bool, steps: int, rewards: List[float]) -> None:
-    # clamp each reward again just to be safe
-    safe_rewards = [max(0.0001, min(r, 0.9999)) for r in rewards]
-
-    reward_str = ",".join(f"{r:.4f}" for r in safe_rewards)
-
-    print(f"[END] success={str(success).lower()} steps={steps} rewards={reward_str}", flush=True)
+def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
+    safe_score   = clamp_score(score)
+    safe_rewards = [clamp_score(r) for r in rewards]
+    reward_str   = ",".join(f"{r:.4f}" for r in safe_rewards)
+    print(
+        f"[END] success={str(success).lower()} steps={steps} "
+        f"score={safe_score:.4f} rewards={reward_str}",
+        flush=True,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -81,7 +94,6 @@ def log_end(success: bool, steps: int, rewards: List[float]) -> None:
 # ---------------------------------------------------------------------------
 
 def _build_client() -> Optional[Any]:
-    """Build OpenAI client if HF_TOKEN is available, otherwise return None for rule-based fallback."""
     if not HF_TOKEN:
         return None
     try:
@@ -91,7 +103,6 @@ def _build_client() -> Optional[Any]:
 
 
 def _call_llm(client: Any, system_prompt: str, user_prompt: str) -> str:
-    """Call the LLM and return the raw text response."""
     response = client.chat.completions.create(
         model=MODEL_NAME,
         messages=[
@@ -105,7 +116,7 @@ def _call_llm(client: Any, system_prompt: str, user_prompt: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Rule-based fallback agent (no API key needed)
+# Rule-based fallback agent
 # ---------------------------------------------------------------------------
 
 _SPAM_KEYWORDS = [
@@ -120,11 +131,9 @@ def _rule_classify(body: str, subject: str, sender: str) -> str:
     spam_hits = sum(1 for kw in _SPAM_KEYWORDS if kw in text)
     if spam_hits >= 2:
         return "spam"
-    urgency_cues = ["urgent", "action required", "asap", "deadline", "outage", "alert", "down"]
-    if any(cue in text for cue in urgency_cues):
+    if any(c in text for c in ["urgent", "action required", "asap", "deadline", "outage", "alert", "down"]):
         return "important"
-    work_cues = ["meeting", "review", "report", "team", "scheduled", "maintenance", "billing"]
-    if any(cue in text for cue in work_cues):
+    if any(c in text for c in ["meeting", "review", "report", "team", "scheduled", "maintenance", "billing"]):
         return "important"
     return "normal"
 
@@ -138,12 +147,11 @@ def _rule_prioritize(body: str, subject: str, urgency_hint: Optional[str]) -> st
     return "low"
 
 
-def _rule_reply(body: str, subject: str, true_label_hint: str) -> str:
+def _rule_reply(body: str, subject: str) -> str:
     text = (subject + " " + body).lower()
     spam_hints = sum(1 for kw in _SPAM_KEYWORDS if kw in text)
     if spam_hints >= 2:
         return "no_reply"
-    # Generic professional acknowledgement
     if "outage" in text or "down" in text:
         return (
             "Thank you for the alert. I am acknowledging the outage and will escalate "
@@ -166,33 +174,35 @@ def _rule_reply(body: str, subject: str, true_label_hint: str) -> str:
         )
     if "lunch" in text or "dinner" in text:
         return (
-            "Sounds good! Thursday lunch works for me – I'll join you at the Italian place. "
+            "Sounds good! Thursday lunch works for me. "
             "Looking forward to it."
         )
     if "maintenance" in text or "wi-fi" in text:
         return (
-            "Thanks for the heads-up. Noted – I'll make sure to complete anything that "
-            "requires VPN access before the maintenance window starts."
+            "Thanks for the heads-up. Noted — I will complete anything requiring "
+            "VPN access before the maintenance window starts."
         )
     return (
-        "Thank you for your email. I have received your message and will get back to you "
-        "as soon as possible."
+        "Thank you for your email. I have received your message and will "
+        "get back to you as soon as possible."
     )
 
 
 # ---------------------------------------------------------------------------
-# LLM-based agent helpers
+# LLM-based helpers
 # ---------------------------------------------------------------------------
 
 _CLASSIFY_SYSTEM = textwrap.dedent("""
     You are an expert email classifier. Given an email, respond with EXACTLY one of:
     spam | important | normal
-    No explanation. Just the single label.
+    No explanation. Just the single 
+    label.
 """).strip()
 
 _PRIORITIZE_SYSTEM = textwrap.dedent("""
+
     You are an email triage specialist. Given an email, respond with EXACTLY one of:
-    high | medium | low
+    hig-coreh | medium | low
     No explanation. Just the single priority level.
 """).strip()
 
@@ -200,7 +210,7 @@ _REPLY_SYSTEM = textwrap.dedent("""
     You are a professional executive assistant composing email replies.
     If the email is spam, respond with exactly: no_reply
     Otherwise write a concise, professional reply (2-4 sentences).
-    Do NOT include any explanation or metadata – just the reply text.
+    Do NOT include any explanation or metadata — just the reply text.
 """).strip()
 
 
@@ -212,9 +222,7 @@ def _llm_classify(client: Any, obs_dict: Dict[str, Any]) -> str:
             f"Body:\n{obs_dict['body']}"
         )
         label = _call_llm(client, _CLASSIFY_SYSTEM, user_prompt).lower().strip()
-        if label not in ("spam", "important", "normal"):
-            label = "normal"
-        return label
+        return label if label in ("spam", "important", "normal") else "normal"
     except Exception:
         return _rule_classify(obs_dict["body"], obs_dict["subject"], obs_dict["sender"])
 
@@ -228,9 +236,7 @@ def _llm_prioritize(client: Any, obs_dict: Dict[str, Any]) -> str:
             f"Body:\n{obs_dict['body']}"
         )
         level = _call_llm(client, _PRIORITIZE_SYSTEM, user_prompt).lower().strip()
-        if level not in ("high", "medium", "low"):
-            level = "medium"
-        return level
+        return level if level in ("high", "medium", "low") else "medium"
     except Exception:
         return _rule_prioritize(obs_dict["body"], obs_dict["subject"], obs_dict.get("urgency_hint"))
 
@@ -244,7 +250,7 @@ def _llm_reply(client: Any, obs_dict: Dict[str, Any]) -> str:
         )
         return _call_llm(client, _REPLY_SYSTEM, user_prompt)
     except Exception:
-        return _rule_reply(obs_dict["body"], obs_dict["subject"], "")
+        return _rule_reply(obs_dict["body"], obs_dict["subject"])
 
 
 # ---------------------------------------------------------------------------
@@ -256,39 +262,27 @@ def build_action(
     obs: Any,
     client: Optional[Any],
 ) -> Tuple[Action, str]:
-    """
-    Decide on an action for the current observation.
-    Uses LLM if available, otherwise falls back to rule-based logic.
-
-    Returns (Action, action_str_for_logging).
-    """
     obs_dict = obs.model_dump()
 
     if task_name == "spam_detection":
-        if client:
-            label = _llm_classify(client, obs_dict)
-        else:
-            label = _rule_classify(obs_dict["body"], obs_dict["subject"], obs_dict["sender"])
-        action = Action(action_type=ActionType.CLASSIFY, label=EmailLabel(label))
+        label = _llm_classify(client, obs_dict) if client else \
+                _rule_classify(obs_dict["body"], obs_dict["subject"], obs_dict["sender"])
+        action     = Action(action_type=ActionType.CLASSIFY, label=EmailLabel(label))
         action_str = f"classify_email(label={label})"
 
     elif task_name == "email_prioritization":
-        if client:
-            level = _llm_prioritize(client, obs_dict)
-        else:
-            level = _rule_prioritize(obs_dict["body"], obs_dict["subject"], obs_dict.get("urgency_hint"))
-        action = Action(action_type=ActionType.PRIORITIZE, priority=PriorityLevel(level))
+        level = _llm_prioritize(client, obs_dict) if client else \
+                _rule_prioritize(obs_dict["body"], obs_dict["subject"], obs_dict.get("urgency_hint"))
+        action     = Action(action_type=ActionType.PRIORITIZE, priority=PriorityLevel(level))
         action_str = f"prioritize_email(priority={level})"
 
     elif task_name == "auto_reply":
-        if client:
-            reply = _llm_reply(client, obs_dict)
-        else:
-            reply = _rule_reply(obs_dict["body"], obs_dict["subject"], "")
-        # Truncate for logging
-        short = reply[:60].replace("\n", " ") + ("..." if len(reply) > 60 else "")
-        action = Action(action_type=ActionType.REPLY, reply_text=reply)
-        action_str = f'reply_email(text="{short}")'
+        reply = _llm_reply(client, obs_dict) if client else \
+                _rule_reply(obs_dict["body"], obs_dict["subject"])
+        # Truncate for log line — keep it short and single-line
+        short      = reply[:50].replace("\n", " ") + ("..." if len(reply) > 50 else "")
+        action     = Action(action_type=ActionType.REPLY, reply_text=reply)
+        action_str = f"reply_email(text={short!r})"
 
     else:
         raise ValueError(f"Unsupported task: {task_name}")
@@ -301,7 +295,6 @@ def build_action(
 # ---------------------------------------------------------------------------
 
 def run_task(task_name: str, client: Optional[Any]) -> Dict[str, Any]:
-    """Run one complete episode for the given task. Returns summary dict."""
     env = EmailManagementEnv(task_name=task_name)
     obs = env.reset()
 
@@ -317,13 +310,18 @@ def run_task(task_name: str, client: Optional[Any]) -> Dict[str, Any]:
         try:
             obs, raw_reward, done, info = env.step(action)
         except Exception as exc:
-            log_step(step=step, action=action_str, reward=0.01, done=True, error=str(exc))
-            log_end(success=False, steps=step, rewards=all_rewards)
-            return {"task": task_name, "success": False, "steps": step, "rewards": all_rewards}
+            score_on_error = clamp_score(
+                sum(all_rewards) / len(all_rewards) if all_rewards else 0.0001
+            )
+            log_step(step=step, action=action_str, reward=0.0001, done=True, error=str(exc))
+            log_end(success=False, steps=step, score=score_on_error, rewards=all_rewards)
+            return {
+                "task": task_name, "success": False,
+                "steps": step, "rewards": all_rewards, "mean_reward": score_on_error,
+            }
 
-        # safely extract numeric reward and clamp to strict (0, 1) bounds
         numeric_reward = float(getattr(raw_reward, "value", raw_reward))
-        safe_reward = clamp_score(numeric_reward)
+        safe_reward    = clamp_score(numeric_reward)
 
         all_rewards.append(safe_reward)
         log_step(
@@ -337,12 +335,12 @@ def run_task(task_name: str, client: Optional[Any]) -> Dict[str, Any]:
         if done:
             break
 
-    mean_reward = sum(all_rewards) / len(all_rewards) if all_rewards else 0.0001
-    mean_reward = clamp_score(mean_reward)
-
+    mean_reward = clamp_score(
+        sum(all_rewards) / len(all_rewards) if all_rewards else 0.0001
+    )
     success = mean_reward > 0.0001
 
-    log_end(success=success, steps=step, rewards=all_rewards)
+    log_end(success=success, steps=step, score=mean_reward, rewards=all_rewards)
     print(f"[INFO] mean_reward={mean_reward:.4f}\n", flush=True)
 
     return {
@@ -368,23 +366,25 @@ def main() -> None:
     print("=" * 68)
     print()
 
-    client = _build_client()
-
+    client  = _build_client()
     results = []
+
     for task_name in TASK_NAMES:
         print("-" * 68)
         result = run_task(task_name, client)
         results.append(result)
         time.sleep(0.1)
 
-    # Final summary
     print("=" * 68)
     print("  FINAL SUMMARY")
     print("=" * 68)
     overall_success = all(r["success"] for r in results)
     for r in results:
         status = "PASS" if r["success"] else "FAIL"
-        print(f"  [{status}]  {r['task']:<28}  mean_reward={r['mean_reward']:.4f}  steps={r['steps']}")
+        print(
+            f"  [{status}]  {r['task']:<28}  "
+            f"mean_reward={r['mean_reward']:.4f}  steps={r['steps']}"
+        )
     print("-" * 68)
     print(f"  Overall: {'PASSED' if overall_success else 'FAILED'}")
     print("=" * 68)
