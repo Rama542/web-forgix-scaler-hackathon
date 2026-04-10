@@ -1,25 +1,73 @@
+# # docker-compose.yml – Email Management RL Environment
+# # ---------------------------------------------------------------------------
+# # Usage:
+# #   docker-compose up app        # Launch Gradio UI at http://localhost:7860
+# #   docker-compose up inference  # Run the baseline inference script
+# # ---------------------------------------------------------------------------
+
+# version: "3.9"
+
+# services:
+#   # ── Gradio Web UI ──────────────────────────────────────────────────────────
+#   app:
+#     build: .
+#     image: email-rl-env:latest
+#     container_name: email_rl_app
+#     environment:
+#       RUN_MODE: app
+#       API_BASE_URL: ${API_BASE_URL:-https://api.openai.com/v1}
+#       MODEL_NAME: ${MODEL_NAME:-gpt-3.5-turbo}
+#       HF_TOKEN: ${HF_TOKEN:-}
+#     ports:
+#       - "7860:7860"
+#     restart: unless-stopped
+
+#   # ── Baseline Inference Script ──────────────────────────────────────────────
+#   inference:
+#     build: .
+#     image: email-rl-env:latest
+#     container_name: email_rl_inference
+#     environment:
+#       RUN_MODE: inference
+#       API_BASE_URL: ${API_BASE_URL:-https://api.openai.com/v1}
+#       MODEL_NAME: ${MODEL_NAME:-gpt-3.5-turbo}
+#       HF_TOKEN: ${HF_TOKEN:-}
+#     profiles:
+#       - inference   # only starts when explicitly requested
+
 # docker-compose.yml – Email Management RL Environment
 # ---------------------------------------------------------------------------
 # Usage:
-#   docker-compose up app        # Launch Gradio UI at http://localhost:7860
-#   docker-compose up inference  # Run the baseline inference script
+#   docker compose up app                    # Launch server at http://localhost:7860
+#   docker compose --profile inference run inference   # Run baseline inference
+#
+# Environment variables (set in .env file or export before running):
+#   API_BASE_URL   The LLM API endpoint
+#   MODEL_NAME     The model identifier
+#   HF_TOKEN       Your HuggingFace / API key
+#   TASK_NAME      Task to run: spam_detection | email_prioritization | auto_reply
 # ---------------------------------------------------------------------------
 
-version: "3.9"
-
 services:
-  # ── Gradio Web UI ──────────────────────────────────────────────────────────
+
+  # ── FastAPI OpenEnv Server ─────────────────────────────────────────────────
   app:
     build: .
     image: email-rl-env:latest
     container_name: email_rl_app
+    command: [ "uvicorn", "server:app", "--host", "0.0.0.0", "--port", "7860", "--workers", "1" ]
     environment:
-      RUN_MODE: app
       API_BASE_URL: ${API_BASE_URL:-https://api.openai.com/v1}
-      MODEL_NAME: ${MODEL_NAME:-gpt-3.5-turbo}
+      MODEL_NAME: ${MODEL_NAME:-gpt-4.1-mini}
       HF_TOKEN: ${HF_TOKEN:-}
     ports:
       - "7860:7860"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:7860/" ]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
     restart: unless-stopped
 
   # ── Baseline Inference Script ──────────────────────────────────────────────
@@ -27,10 +75,16 @@ services:
     build: .
     image: email-rl-env:latest
     container_name: email_rl_inference
+    # Override CMD — run inference.py, NOT the uvicorn server
+    command: [ "python", "inference.py" ]
     environment:
-      RUN_MODE: inference
       API_BASE_URL: ${API_BASE_URL:-https://api.openai.com/v1}
-      MODEL_NAME: ${MODEL_NAME:-gpt-3.5-turbo}
+      MODEL_NAME: ${MODEL_NAME:-gpt-4.1-mini}
       HF_TOKEN: ${HF_TOKEN:-}
+      TASK_NAME: ${TASK_NAME:-spam_detection}
+    depends_on:
+      app:
+        condition: service_healthy # wait for server to be ready
     profiles:
-      - inference   # only starts when explicitly requested
+      - inference # only starts when explicitly requested
+    restart: "no" # one-shot script — never auto-restart
