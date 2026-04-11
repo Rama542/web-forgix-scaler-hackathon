@@ -1,14 +1,4 @@
 
-
-
-
-
-
-
-
-
-
-
 """
 inference.py – Baseline agent for the Email Management RL Environment.
 
@@ -390,4 +380,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    for TASK_NAME in ["spam_detection", "email_prioritization", "auto_reply"]:
+        main()
