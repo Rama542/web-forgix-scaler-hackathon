@@ -1,61 +1,74 @@
 import uvicorn
 from fastapi import FastAPI, Request
-from pydantic import BaseModel
-from typing import Any, Dict, Optional
-
 from env.email_env import EmailManagementEnv
-from env.models import Action 
+from env.models import Action
 
 app = FastAPI(title="Email Management OpenEnv Server")
 env_instance = None
+
+def clamp(v):
+    try:
+        v = float(v)
+    except:
+        return 0.01
+    if v <= 0.0: return 0.01
+    if v >= 1.0: return 0.99
+    return v
 
 @app.post("/reset")
 async def reset(request: Request):
     global env_instance
     try:
         body = await request.json()
-    except Exception:
+    except:
         body = {}
-        
     task_name = body.get("task_name", "spam_detection")
     env_instance = EmailManagementEnv(task_name=task_name)
     obs = env_instance.reset()
-    
-    return {
-        "observation": obs.model_dump(),
-        "info": {"task_name": task_name}
-    }
+    return {"observation": obs.model_dump(), "info": {"task_name": task_name}}
 
 @app.post("/step")
 async def step(request: Request):
     global env_instance
     if env_instance is None:
-        return {"error": "Environment not initialized. Call /reset first."}
-        
+        return {"error": "Call /reset first."}
     body = await request.json()
-    action_dict = body.get("action", {})
-    
-    action = Action(**action_dict)
-    
+    action = Action(**body.get("action", {}))
     next_obs, reward, done, info = env_instance.step(action)
-    
+    raw = float(getattr(reward, "value", reward))
+    safe = clamp(raw)
     return {
         "observation": next_obs.model_dump() if next_obs else None,
-        "reward": reward.value, 
+        "reward": safe,
+        "score": safe,
         "done": done,
         "info": info
     }
 
-@app.get("/")
-async def root():
+@app.get("/state")
+async def state():
+    global env_instance
+    if env_instance is None:
+        return {"tasks": ["spam_detection", "email_prioritization", "auto_reply"]}
+    return {"state": {}, "tasks": ["spam_detection", "email_prioritization", "auto_reply"]}
+
+@app.get("/tasks")
+async def tasks():
     return {
-        "status": "ready",
-        "message": "Email RL Environment Server is running.",
-        "endpoints": ["POST /reset", "POST /step"]
+        "tasks": [
+            {"id": "spam_detection", "grader": "grade_classification", "score_range": [0.01, 0.99]},
+            {"id": "email_prioritization", "grader": "grade_prioritization", "score_range": [0.01, 0.99]},
+            {"id": "auto_reply", "grader": "grade_reply", "score_range": [0.01, 0.99]},
+        ]
     }
 
-def main():
-    uvicorn.run("server.app:app", host="0.0.0.0", port=7860)
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+@app.get("/")
+async def root():
+    return {"status": "ready", "endpoints": ["POST /reset", "POST /step", "GET /state", "GET /tasks"]}
 
 if __name__ == "__main__":
-    main()
+    uvicorn.run("server:app", host="0.0.0.0", port=7860)
