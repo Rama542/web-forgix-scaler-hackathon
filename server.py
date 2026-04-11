@@ -9,20 +9,12 @@ from env.models import Action
 
 app = FastAPI(title="Email Management OpenEnv Server")
 
-# Session dict — each /reset call gets its own env instance
 _envs: Dict[str, EmailManagementEnv] = {}
 _current_session: Optional[str] = None
-
-# Keys in info dict that represent scores and must be clamped
 _SCORE_KEYS = {"score", "mean_score", "reward", "partial_score", "correctness"}
 
 
-# ---------------------------------------------------------------------------
-# Clamp helper
-# ---------------------------------------------------------------------------
-
 def _clamp(v: Any) -> float:
-    """Return a float strictly inside (0.0, 1.0) — never 0.0 or 1.0."""
     try:
         f = float(v)
         if math.isnan(f) or math.isinf(f):
@@ -30,17 +22,13 @@ def _clamp(v: Any) -> float:
     except Exception:
         return 0.5
     if f <= 0.0:
-        return 0.001
+        return 0.01
     if f >= 1.0:
-        return 0.999
+        return 0.99
     return f
 
 
 def _sanitise_info(info: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Walk the info dict and clamp any known score/reward keys.
-    All other values (step counts, strings, etc.) pass through unchanged.
-    """
     safe: Dict[str, Any] = {}
     for k, v in (info or {}).items():
         if k in _SCORE_KEYS and isinstance(v, (int, float)):
@@ -50,23 +38,34 @@ def _sanitise_info(info: Dict[str, Any]) -> Dict[str, Any]:
     return safe
 
 
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
-
 @app.get("/")
 async def root():
     return JSONResponse(content={
-        "status":    "ready",
-        "message":   "Email RL Environment Server is running.",
-        "endpoints": ["POST /reset", "POST /step", "GET /state", "GET /"],
+        "status": "ready",
+        "message": "Email RL Environment Server is running.",
+        "endpoints": ["POST /reset", "POST /step", "GET /state", "GET /tasks", "GET /health"],
+    })
+
+
+@app.get("/health")
+async def health():
+    return JSONResponse(content={"status": "ok"})
+
+
+@app.get("/tasks")
+async def tasks():
+    return JSONResponse(content={
+        "tasks": [
+            {"id": "spam_detection", "grader": "grade_classification", "score_range": [0.01, 0.99]},
+            {"id": "email_prioritization", "grader": "grade_prioritization", "score_range": [0.01, 0.99]},
+            {"id": "auto_reply", "grader": "grade_reply", "score_range": [0.01, 0.99]},
+        ]
     })
 
 
 @app.post("/reset")
 async def reset(request: Request):
     global _current_session
-
     try:
         body = await request.json()
     except Exception:
@@ -74,7 +73,6 @@ async def reset(request: Request):
 
     task_name = body.get("task_name", "spam_detection")
 
-    # Tear down old session cleanly
     if _current_session and _current_session in _envs:
         try:
             _envs[_current_session].close()
@@ -82,8 +80,7 @@ async def reset(request: Request):
             pass
         del _envs[_current_session]
 
-    # Create fresh session
-    session_id       = str(uuid.uuid4())
+    session_id = str(uuid.uuid4())
     _current_session = session_id
 
     env = EmailManagementEnv(task_name=task_name)
@@ -92,8 +89,8 @@ async def reset(request: Request):
 
     return JSONResponse(content={
         "observation": obs.model_dump(),
-        "session_id":  session_id,
-        "info":        {"task_name": task_name},
+        "session_id": session_id,
+        "info": {"task_name": task_name},
     })
 
 
@@ -102,10 +99,7 @@ async def step(request: Request):
     global _current_session
 
     if not _current_session or _current_session not in _envs:
-        raise HTTPException(
-            status_code=400,
-            detail="Environment not initialized. Call /reset first.",
-        )
+        raise HTTPException(status_code=400, detail="Call /reset first.")
 
     try:
         body = await request.json()
@@ -125,17 +119,12 @@ async def step(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"env.step() failed: {e}")
 
-    # ── Reward ───────────────────────────────────────────────────────────────
-    raw_reward  = float(reward.value) if hasattr(reward, "value") else float(reward)
+    raw_reward = float(reward.value) if hasattr(reward, "value") else float(reward)
     safe_reward = _clamp(raw_reward)
 
-    # ── Info dict ────────────────────────────────────────────────────────────
     safe_info = _sanitise_info(info)
-
-    # ALWAYS guarantee "score" exists in info and is clamped — validator reads it
     safe_info["score"] = _clamp(float(info.get("score", raw_reward)))
 
-    # ── Cleanup on episode end ───────────────────────────────────────────────
     if done:
         try:
             env.close()
@@ -147,35 +136,34 @@ async def step(request: Request):
 
     return JSONResponse(content={
         "observation": next_obs.model_dump() if next_obs else None,
-        "reward":      safe_reward,          # strictly in (0, 1)
-        "score":       safe_info["score"],   # strictly in (0, 1) — validator reads THIS
-        "done":        done,
-        "info":        safe_info,
+        "reward": safe_reward,
+        "score": safe_info["score"],
+        "done": done,
+        "info": safe_info,
     })
 
 
 @app.get("/state")
 async def state():
-    """Required by OpenEnv spec — returns current environment state."""
     global _current_session
 
     if not _current_session or _current_session not in _envs:
         return JSONResponse(content={
-            "status":     "not_initialized",
+            "status": "not_initialized",
             "session_id": None,
-            "state":      None,
+            "state": None,
         })
 
     env = _envs[_current_session]
     try:
-        env_state = env.state().model_dump()   # use env.state(), not get_state()
+        env_state = env.state().model_dump()
     except Exception:
         env_state = {}
 
     return JSONResponse(content={
-        "status":     "ready",
+        "status": "ready",
         "session_id": _current_session,
-        "state":      env_state,
+        "state": env_state,
     })
 
 
